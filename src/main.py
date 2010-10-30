@@ -326,8 +326,9 @@ class SWF:
                 print "ActionPush string: %s" %stackElt
                 value = String(stackElt)
             elif type == 1:
-                print "skipping 4-byte float"
-                self.step_bytes(4)
+                stackElt = self.read_float()
+                print "ActionPush Float: %f" %stackElt
+                value = Float(stackElt)
             elif type == 2:
                 print "ActionPush null"
                 value = Null()
@@ -343,8 +344,9 @@ class SWF:
                 print "ActionPush Boolean: %d" %stackElt
                 value = Boolean(stackElt)
             elif type == 6:
-                print "Skipping 8-byte double"
-                self.step_bytes(8)
+                stackElt = self.read_double()
+                print "ActionPush Double: %f" %stackElt
+                value = Double(stackElt)
             elif type == 7:
                 stackElt = self.read_ui(4)
                 print "ActionPush Integer: %d" %stackElt
@@ -456,7 +458,15 @@ class SWF:
         ui = self.next_unsigned_bytes_little_endian(num_bytes)
         self.step_bytes(num_bytes)
         return ui
-    
+    def read_string_bytes(self, num_bytes):
+        string_bytes = self.file_contents[self.byte_pos:self.byte_pos+num_bytes]
+        self.step_bytes(num_bytes)
+        return string_bytes
+    def read_float(self):
+        return struct.unpack('<f', self.read_string_bytes(4))
+    def read_double(self):
+        return struct.unpack('<d', self.read_string_bytes(8))
+            
     def next_bit_string(self, num_bits):
         end_bit_pos = self.bit_pos + num_bits
         num_bytes = 1 + (end_bit_pos)/8
