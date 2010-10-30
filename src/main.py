@@ -323,41 +323,31 @@ class SWF:
             type = self.read_ui(1)
             if type == 0:
                 stackElt = self.read_string()
-                print "ActionPush string: %s" %stackElt
                 value = String(stackElt)
             elif type == 1:
                 stackElt = self.read_float()
-                print "ActionPush Float: %f" %stackElt
                 value = Float(stackElt)
             elif type == 2:
-                print "ActionPush null"
                 value = Null()
             elif type == 3:
-                print "ActionPush undefined"
                 value = Undefined()
             elif type == 4:
                 stackElt = self.read_ui(1)
-                print "ActionPush RegisterNumber: %d" %stackElt
                 value = RegisterNumber(stackElt)
             elif type == 5:
                 stackElt = self.read_ui(1)
-                print "ActionPush Boolean: %d" %stackElt
                 value = Boolean(stackElt)
             elif type == 6:
                 stackElt = self.read_double()
-                print "ActionPush Double: %f" %stackElt
                 value = Double(stackElt)
             elif type == 7:
                 stackElt = self.read_ui(4)
-                print "ActionPush Integer: %d" %stackElt
                 value = Integer(stackElt)
             elif type == 8:
                 stackElt = self.read_ui(1)
-                print "ActionPush 1-byte Constant: %d" %stackElt
                 value = Constant8(stackElt)
             elif type == 9:
                 stackElt = self.read_ui(2)
-                print "ActionPush 2-byte Constant: %d" %stackElt
                 value = Constant16(stackElt)
             else:
                 raise Exception("Unknown type %d" %type)
