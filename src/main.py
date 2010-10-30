@@ -4,21 +4,54 @@ Created on Jul 20, 2010
 @author: dannygoodman
 '''
 
+import copy
 import struct
 
 
 class Tag:
-  def __init__(self, parent=None, contents=""):
-    self.children = []
-    self.contents = contents
-    self.parent = parent
-  def addChild(tag):
-    self.children.append(tag)
-    tag.parent = self
+    def __init__(self, contents=None, length=-1, parent=None):
+        self.children = []
+        self.contents = contents
+        self.length = length
+        self.parent = parent
+    def addChild(self, tag):
+        self.children.append(tag)
+        tag.parent = self
+    def __str__(self, indent=0):
+        self_str = "%s%s: %s" %("  " * indent, self.__class__.__name__, str(self.contents))
+        for child_tag in self.children:
+            self_str += "\n%s" %child_tag.__str__(indent = indent+1)
+        return self_str
+
+
     
 class Program(Tag):
-  def __init__(self):
-    Tag.__init__(self, parent=None, contents="")
+    pass
+
+
+
+class ActionTag(Tag):
+    def __init__(self, **kwargs):
+        if 'contents' not in kwargs:
+            kwargs['contents'] = {}
+        Tag.__init__(self, **kwargs)
+
+class DoActionTag(ActionTag):
+    pass
+    
+class DoInitActionTag(DoActionTag):
+    @classmethod
+    def fromDoActionTag(klass, sprite_id, do_action_tag):
+        do_init_action_tag = klass()
+        for attr,value in do_action_tag.__dict__.items():
+            do_init_action_tag.__dict__[attr] = copy.copy(value)
+        do_init_action_tag.contents['sprite_id'] = sprite_id
+        return do_init_action_tag
+
+class VideoStreamTag(Tag):
+    pass
+
+
 
 class SWF:
     tag_type_to_string = {
@@ -87,6 +120,7 @@ class SWF:
         print "[end header]\n"
     
     def read_action(self):
+        action_tag = ActionTag()
         startPos = self.byte_pos
         (action_code, action_length) = self.read_action_header()
         expected_length = 1
@@ -103,18 +137,23 @@ class SWF:
             print "Action code %d of length 0" %action_code
         bytesRead = self.byte_pos - startPos
         assert bytesRead == expected_length, "Wrong number of action bytes: expected %d, read %d" %(expected_length, bytesRead)
-        return expected_length
+        action_tag.length = expected_length
+        return action_tag
     
     def read_actions(self):
+        do_action_tag = DoActionTag()
         next_byte = self.next_unsigned_bytes_little_endian(1)
         total_len = 0
         while next_byte != 0:
-            total_len += self.read_action()
+            action_tag = self.read_action()
+            do_action_tag.addChild(action_tag)
+            total_len += action_tag.length
             next_byte = self.next_unsigned_bytes_little_endian(1)
             
         self.step_bytes(1)            
         total_len += 1
-        return total_len
+        # return total_len
+        return do_action_tag
 
     def read_action_constant_pool(self, length):
         count = self.read_ui(2)
@@ -225,19 +264,18 @@ class SWF:
         tag_length = short_header % 2**6
         if tag_length == 63:
             tag_length = self.read_si(4)
-          
-          
             
         startPos = self.byte_pos
         if tag_type in (60,):
             print "VIDEO TAG detected: %d" %tag_type
-            self.read_video_stream_tag_body()
+            self.program.addChild( self.read_video_stream_tag_body() )
         elif tag_type == 12:
             print "DoAction (%d)" %tag_type
-            self.read_actions()
+            self.program.addChild( self.read_actions() )
         elif tag_type == 59:
-            print "DoInitAction for Sprite ID %d" %self.read_ui(2)
-            self.read_actions()
+            sprite_id = self.read_ui(2)
+            print "DoInitAction for Sprite ID %d" %sprite_id
+            self.program.addChild( DoInitActionTag.fromDoActionTag( sprite_id, self.read_actions() ) )
         else:
             if tag_type in self.tag_type_to_string:
                 print self.tag_type_to_string[tag_type]
@@ -260,6 +298,15 @@ class SWF:
         print "num frames: %d" %num_frames
         print "dimensions: %d x %d" %(width, height)
         print "codec: %d" %codec_id
+        
+        contents = {
+          character_id : character_id,
+          num_frames : num_frames,
+          width : width,
+          height : height,
+          codec_id : codec_id
+        }
+        return VideoStreamTag(contents = contents)
 
         
     def read_rect(self):
@@ -370,5 +417,8 @@ while swf.byte_pos < len(swf):
 print "Read %d bytes" %len(swf.file_contents)
 print "Byte pos is %d" %swf.byte_pos
 #import pdb; pdb.set_trace()
+
+print "Program has %d child tags" %len(swf.program.children)
+print str(swf.program)
 
 print "done"
