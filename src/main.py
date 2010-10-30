@@ -9,16 +9,17 @@ import struct
 
 
 class Tag:
-    def __init__(self, contents=None, length=-1, parent=None):
+    def __init__(self, contents=None, length=-1, name="", parent=None):
         self.children = []
         self.contents = contents
         self.length = length
+        self.name = name if name else self.__class__.__name__
         self.parent = parent
     def addChild(self, tag):
         self.children.append(tag)
         tag.parent = self
     def __str__(self, indent=0):
-        self_str = "%s%s: %s" %("  " * indent, self.__class__.__name__, str(self.contents))
+        self_str = "%s%s: %s" %("  " * indent, self.name, str(self.contents))
         for child_tag in self.children:
             self_str += "\n%s" %child_tag.__str__(indent = indent+1)
         return self_str
@@ -27,7 +28,7 @@ class Tag:
     
 class Program(Tag):
     pass
-
+    
 
 
 class ActionTag(Tag):
@@ -46,13 +47,14 @@ class DoInitActionTag(DoActionTag):
         for attr,value in do_action_tag.__dict__.items():
             do_init_action_tag.__dict__[attr] = copy.copy(value)
         do_init_action_tag.contents['sprite_id'] = sprite_id
+        do_init_action_tag.name = klass.__name__
         return do_init_action_tag
 
 class VideoStreamTag(Tag):
     pass
 
 
-
+unhandled_codes = {}
 class SWF:
     tag_type_to_string = {
         0 : "End",
@@ -78,7 +80,46 @@ class SWF:
     }
     
     action_code_to_name = {
+        0 : 'action_null?',
+        11 : 'action_subtract',
+        12 : 'action_multiply',
+        13 : 'action_divide',
+        18 : 'action_not',
+        23 : 'action_pop',
         28 : 'action_get_variable',
+        29 : 'action_set_variable',
+        43 : 'action_cast_op',
+        44 : 'action_implements_op',
+        51 : 'action_ascii_to_char',
+        52 : 'action_get_time',
+        58 : 'action_delete',
+        60 : 'action_define_local',
+        61 : 'action_call_function',
+        62 : 'action_return',
+        63 : 'action_modulo',
+        64 : 'action_new_object',
+        66 : 'action_init_array',
+        67 : 'action_init_object',
+        68 : 'action_type_of',
+        71 : 'action_add2',
+        72 : 'action_less2',
+        73 : 'action_equals2',
+        74 : 'action_to_number',
+        75 : 'action_to_string',
+        76 : 'action_push_duplicate',
+        78 : 'action_get_member',
+        79 : 'action_set_member',
+        80 : 'action_increment',
+        81 : 'action_decrement',
+        82 : 'action_call_method',
+        83 : 'action_new_method',
+        84 : 'action_instance_of',
+        85 : 'action_enumerate2',
+        96 : 'action_bit_and',
+        100 : 'action_bit_rshift',
+        102 : 'action_strict_equals',
+        103 : 'action_greater',
+        105 : 'action_extends',
         135 : 'action_store_register',
         136 : 'action_constant_pool',
         142 : 'action_define_function2',
@@ -123,18 +164,25 @@ class SWF:
         action_tag = ActionTag()
         startPos = self.byte_pos
         (action_code, action_length) = self.read_action_header()
-        expected_length = 1
+        
+        assert action_code in self.action_code_to_name, "Unhandled action code: %d" %action_code
+        action_name = self.action_code_to_name[action_code]
+        action_tag.name = action_name
+
+        expected_length = 1        
         if action_length > 0:
-            if action_code in self.action_code_to_name:
-                action_name = self.action_code_to_name[action_code]
-                print "Action %d: %s" %(action_code, action_name)
-                getattr(self, "read_%s" %action_name).__call__(action_length)
-            else:
-                print "Unhandled action code: %d" %action_code
-                action = self.read_ui(action_length)
+            print "Action %d: %s" %(action_code, action_name)
+            getattr(self, "read_%s" %action_name).__call__(action_length)
+            # if action code not in code to name:
+            #     assert False, "Unhandled action code: %d" %action_code
+            #     action = self.read_ui(action_length)
             expected_length = action_length + 3
         else:
+            if action_code not in self.action_code_to_name:
+                unhandled_codes[action_code] = True
             print "Action code %d of length 0" %action_code
+        
+        
         bytesRead = self.byte_pos - startPos
         assert bytesRead == expected_length, "Wrong number of action bytes: expected %d, read %d" %(expected_length, bytesRead)
         action_tag.length = expected_length
@@ -278,9 +326,11 @@ class SWF:
             self.program.addChild( DoInitActionTag.fromDoActionTag( sprite_id, self.read_actions() ) )
         else:
             if tag_type in self.tag_type_to_string:
-                print self.tag_type_to_string[tag_type]
+                tag_name = self.tag_type_to_string[tag_type]
+                print tag_name
+                self.program.addChild(Tag(name=tag_name))
             else:
-                print "Unhandled tag code: %d" % tag_type
+                assert False, "Unhandled tag code: %d" % tag_type
             self.step_bytes(tag_length)
         bytesRead = self.byte_pos - startPos 
         assert tag_length == bytesRead, "Tag length mismatch: expected %d bytes, read %d" %(tag_length, bytesRead)
@@ -420,5 +470,10 @@ print "Byte pos is %d" %swf.byte_pos
 
 print "Program has %d child tags" %len(swf.program.children)
 print str(swf.program)
+
+unhandled_codes = unhandled_codes.keys()
+unhandled_codes.sort()
+for code in unhandled_codes:
+    print "%d: %s" %(code, hex(code))
 
 print "done"

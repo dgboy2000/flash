@@ -13,3 +13,9 @@ for k,v in a.items():
     print k, v
     
 b = 5 if True else 4
+name = ""
+if name:
+    print 'True'
+else:
+    print 'false'
+print 'done'
