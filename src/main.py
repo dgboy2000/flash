@@ -36,6 +36,13 @@ class ActionTag(Tag):
         if 'contents' not in kwargs:
             kwargs['contents'] = {}
         Tag.__init__(self, **kwargs)
+    def update_contents(self, contents):
+        if not contents:
+            return
+        if self.contents and isinstance(self.contents, dict):
+            self.contents.update(contents)
+        else:
+            self.contents = contents
 
 class DoActionTag(ActionTag):
     pass
@@ -52,6 +59,51 @@ class DoInitActionTag(DoActionTag):
 
 class VideoStreamTag(Tag):
     pass
+
+
+
+class Type:
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return "%s(%s)" %(self.__class__.__name__, str(self.value))
+    def __repr__(self):
+        return self.__str__()
+    
+class String(Type):
+    def __init__(self, value):
+        assert isinstance(value, str)
+        Type.__init__(self, value)
+    
+class Float(Type):
+    pass
+
+class Integer(Type):
+    pass
+
+class Boolean(Type):
+    pass
+
+class Double(Type):
+    pass
+
+class RegisterNumber(Type):
+    pass
+
+class Constant8(Type):
+    pass
+
+class Constant16(Type):
+    pass
+
+class Null(Type):
+    def __init__(self):
+        Type.__init__(self, None)
+
+class Undefined(Type):
+    def __init__(self):
+        Type.__init__(self, None)
+
 
 
 unhandled_codes = {}
@@ -171,16 +223,18 @@ class SWF:
 
         expected_length = 1        
         if action_length > 0:
-            print "Action %d: %s" %(action_code, action_name)
-            getattr(self, "read_%s" %action_name).__call__(action_length)
+            # print "Action %d: %s" %(action_code, action_name)
             # if action code not in code to name:
             #     assert False, "Unhandled action code: %d" %action_code
             #     action = self.read_ui(action_length)
+            tag_contents = getattr(self, "read_%s" %action_name).__call__(action_length)
+            action_tag.update_contents(tag_contents)
+
             expected_length = action_length + 3
         else:
             if action_code not in self.action_code_to_name:
                 unhandled_codes[action_code] = True
-            print "Action code %d of length 0" %action_code
+            # print "Action code %d of length 0" %action_code
         
         
         bytesRead = self.byte_pos - startPos
@@ -262,42 +316,54 @@ class SWF:
     def read_action_push(self, length):
         startPos = self.byte_pos
         bytesRead = self.byte_pos - startPos
+        values = []
         while bytesRead < length:
             stackElt = None
+            value = None
             type = self.read_ui(1)
             if type == 0:
                 stackElt = self.read_string()
                 print "ActionPush string: %s" %stackElt
+                value = String(stackElt)
             elif type == 1:
                 print "skipping 4-byte float"
                 self.step_bytes(4)
             elif type == 2:
                 print "ActionPush null"
+                value = Null()
             elif type == 3:
                 print "ActionPush undefined"
+                value = Undefined()
             elif type == 4:
                 stackElt = self.read_ui(1)
                 print "ActionPush RegisterNumber: %d" %stackElt
+                value = RegisterNumber(stackElt)
             elif type == 5:
                 stackElt = self.read_ui(1)
                 print "ActionPush Boolean: %d" %stackElt
+                value = Boolean(stackElt)
             elif type == 6:
                 print "Skipping 8-byte double"
                 self.step_bytes(8)
             elif type == 7:
                 stackElt = self.read_ui(4)
                 print "ActionPush Integer: %d" %stackElt
+                value = Integer(stackElt)
             elif type == 8:
                 stackElt = self.read_ui(1)
                 print "ActionPush 1-byte Constant: %d" %stackElt
+                value = Constant8(stackElt)
             elif type == 9:
                 stackElt = self.read_ui(2)
                 print "ActionPush 2-byte Constant: %d" %stackElt
+                value = Constant16(stackElt)
             else:
                 raise Exception("Unknown type %d" %type)
             self.action_stack.append(stackElt)
+            values.append(value)
             bytesRead = self.byte_pos - startPos
         assert bytesRead == length, "Error in action push: expected %d bytes, read %d" %(length, bytesRead)
+        return {'values' : values}
 
         
     def read_action_store_register(self, length):
