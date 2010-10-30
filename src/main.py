@@ -259,9 +259,10 @@ class SWF:
 
     def read_action_constant_pool(self, length):
         count = self.read_ui(2)
-        print "%d strings:" %count
+        string_constants = []
         for i in range(count):
-            print "%d: %s" %(i+1, self.read_string())
+            string_constants.append(self.read_string())
+        return {'string_constants' : string_constants}
     
     def read_action_define_function(self, length):
         startPos = self.byte_pos
