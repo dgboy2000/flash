@@ -73,9 +73,41 @@ class DefineSprite(DefineCharacter):
     character_type = "Sprite"
 
 class DoActionTag(ActionTag):
-    pass
+    """
+    DoAction instructs Flash Player to perform a list of actions when the current frame is
+    complete. The actions are performed when the ShowFrame tag is encountered, regardless of
+    where in the frame the DoAction tag appears.
+    
+    Starting with SWF 9, if the ActionScript3 field of the FileAttributes tag is 1, the contents of
+    the DoAction tag will be ignored.
+    """
+    def execute(self):
+        if 'Frame' in globals():
+            raise
+        print "Skipping execution of DoAction since Frames / ShowFrame not implemented"
     
 class DoInitActionTag(DoActionTag):
+    """
+    The DoInitAction tag is similar to the DoAction tag: it defines a series of bytecodes to be
+    executed. However, the actions defined with DoInitAction are executed earlier than the usual
+    DoAction actions, and are executed only once.
+    
+    In some situations, actions must be executed before the ActionScript representation of the first
+    instance of a particular sprite is created. The most common such action is calling
+    Object.registerClass to associate an ActionScript class with a sprite. Such a call is generally
+    found within the #initclip pragma in the ActionScript language. DoInitAction is used to
+    implement the #initclip pragma.
+    
+    A DoInitAction tag specifies a particular sprite to which its actions apply. A single frame can
+    contain multiple DoInitAction tags; their actions are executed in the order in which the tags
+    appear. However, the SWF file can contain only one DoInitAction tag for any particular
+    sprite.
+    
+    The specified actions are executed immediately before the normal actions of the frame in
+    which the DoInitAction tag appears. This only occurs the first time that this frame is
+    encountered; playback reaches the same frame again later, actions provided in DoInitAction
+    are skipped.
+    """
     @classmethod
     def fromDoActionTag(klass, sprite_id, do_action_tag):
         do_init_action_tag = klass()
@@ -84,6 +116,14 @@ class DoInitActionTag(DoActionTag):
         do_init_action_tag.contents['sprite_id'] = sprite_id
         do_init_action_tag.name = klass.__name__
         return do_init_action_tag
+        
+class ShowFrame(Tag):
+    """
+    The ShowFrame tag instructs Flash Player to display the contents of the display list. The file is
+    paused for the duration of a single frame.
+    
+    The minimum file format version is SWF 1.
+    """
 
 class VideoStreamTag(DefineCharacter):
     character_type = "VideoStream"

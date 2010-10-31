@@ -47,15 +47,15 @@ class SWF:
         # 22 : "DefineShape2",
         24 : False,
         # 32 : "DefineShape3",
-        # 36 : "DefineBitsLossless2",
-        # 37 : "DefineEditText",
+        36 : False,
+        37 : False,
         # 39 : "DefineSprite",
-        # 48 : "DefineFont",
+        48 : False,
         56 : False,
         # 59 : "DoInitAction",
         # 60 : "DefineVideoStream",
         # 70 : "PlaceObject3",
-        # 88 : "DefineFontName"
+        88 : False,
         -1 : True
     }
     
@@ -301,6 +301,8 @@ class SWF:
         self.action_registers[registerIndex] = stackElt
 
     def read_tag(self):
+        tag = None
+        
         short_header = self.read_ui(2)
         tag_type = short_header / 2**6
         tag_length = short_header % 2**6
@@ -310,39 +312,49 @@ class SWF:
         startPos = self.byte_pos
         if tag_type in (60,):
             print "VIDEO TAG detected: %d" %tag_type
-            self.program.addChild( self.read_video_stream_tag_body() )
+            tag = self.read_video_stream_tag_body()
         elif tag_type == 12:
             print "DoAction (%d)" %tag_type
-            self.program.addChild( self.read_actions() )
+            tag = self.read_actions()
         elif tag_type == 59:
             sprite_id = self.read_ui(2)
             print "DoInitAction for Sprite ID %d" %sprite_id
-            self.program.addChild( DoInitActionTag.fromDoActionTag( sprite_id, self.read_actions() ) )
+            tag = DoInitActionTag.fromDoActionTag( sprite_id, self.read_actions() )
         elif tag_type in (2, 22, 32):
-            self.program.addChild( self.read_define_shape(tag_length) )
+            tag = self.read_define_shape(tag_length)
         elif tag_type == 39:
-            self.program.addChild( self.read_define_sprite(tag_length) )
+            tag = self.read_define_sprite(tag_length)
+        elif tag_type == 1:
+            tag = self.read_show_frame(tag_length)
         else:
             if tag_type in self.tag_type_to_string:
                 tag_name = self.tag_type_to_string[tag_type]
                 if tag_type in self.tag_type_to_is_executable and not self.tag_type_to_is_executable[tag_type]:
-                    self.program.addChild(NonExecutingTag(name=tag_name))
+                    tag = NonExecutingTag(name=tag_name)
                 else:
-                    self.program.addChild(Tag(name=tag_name))
+                    tag = Tag(name=tag_name)
             else:
                 assert False, "Unhandled tag code: %d" % tag_type
             self.step_bytes(tag_length)
         bytesRead = self.byte_pos - startPos 
         assert tag_length == bytesRead, "Tag length mismatch: expected %d bytes, read %d" %(tag_length, bytesRead)
+        return tag
         
         
         
+    def read_control_tags_for_character(self, character_tag, tags_length):
+        end_pos = swf.byte_pos + tags_length
+        while self.byte_pos < end_pos:
+            character_tag.addChild(self.read_tag())
+                    
     def read_define_shape(self, tag_length):
         before_pos = self.byte_pos
         shape_id = self.read_ui(2)
         shape_bounds = self.read_rect()
         self.step_bytes( tag_length + before_pos - self.byte_pos )
-        return DefineShape(shape_id, contents={'shape_bounds': shape_bounds})
+        shape = DefineShape(shape_id, contents={'shape_bounds': shape_bounds})
+        # self.read_control_tags_for_character(shape, tag_length + before_pos - self.byte_pos)
+        return shape
        
     def read_define_sprite(self, tag_length):
         before_pos = self.byte_pos
@@ -350,6 +362,10 @@ class SWF:
         frame_count = self.read_ui(2)
         self.step_bytes( tag_length + before_pos - self.byte_pos )
         return DefineSprite(sprite_id, contents={'frame_count': frame_count})
+      
+    def read_show_frame(self, tag_length):
+        self.step_bytes( tag_length )
+        return ShowFrame()
       
     def read_video_stream_tag_body(self):
         character_id = self.read_ui(2)
@@ -487,7 +503,7 @@ swf = SWF('/Users/dannygoodman/Desktop/SideIdeas/Coding/Web/video/flash/example_
 
 swf.read_header()
 while swf.byte_pos < len(swf):
-    swf.read_tag()
+    swf.program.addChild(swf.read_tag())
 print "Read %d bytes" %len(swf.file_contents)
 print "Byte pos is %d" %swf.byte_pos
 #import pdb; pdb.set_trace()
