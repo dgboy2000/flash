@@ -57,3 +57,6 @@ class Shape(Character):
         
 class Sprite(Character):
     pass
+    
+class VideoStream(Character):
+    pass
