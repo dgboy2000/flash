@@ -7,6 +7,7 @@ Created on Jul 20, 2010
 import copy
 import struct
 
+from flash_types import *
 
 class Tag:
     def __init__(self, contents=None, length=-1, name="", parent=None):
@@ -15,19 +16,43 @@ class Tag:
         self.length = length
         self.name = name if name else self.__class__.__name__
         self.parent = parent
-    def addChild(self, tag):
-        self.children.append(tag)
-        tag.parent = self
     def __str__(self, indent=0):
         self_str = "%s%s: %s" %("  " * indent, self.name, str(self.contents))
         for child_tag in self.children:
             self_str += "\n%s" %child_tag.__str__(indent = indent+1)
         return self_str
+    def addChild(self, tag):
+        self.children.append(tag)
+        tag.parent = self
+    def execute(self):
+        raise NotImplementedError("execute not defined for tag: %s" %self.__str__())
+    def program(self):
+        return self.parent.program()
+    def update_contents(self, contents):
+        if not contents:
+            return
+        if self.contents and isinstance(self.contents, dict):
+            self.contents.update(contents)
+        else:
+            self.contents = contents
+
+class NonExecutingTag(Tag):
+    def execute(self):
+        print "Skipping execution of tag: %s" %self.__str__()
 
 
     
 class Program(Tag):
-    pass
+    def __init__(self, *args, **kwargs):
+        self.shapes = {}
+        Tag.__init__(self, *args, **kwargs)
+    def addShape(self, shape):
+        self.shapes[shape.shape_id] = shape
+    def execute(self):
+        for child_tag in self.children:
+            child_tag.execute()
+    def program(self):
+        return self
     
 
 
@@ -36,13 +61,15 @@ class ActionTag(Tag):
         if 'contents' not in kwargs:
             kwargs['contents'] = {}
         Tag.__init__(self, **kwargs)
-    def update_contents(self, contents):
-        if not contents:
-            return
-        if self.contents and isinstance(self.contents, dict):
-            self.contents.update(contents)
-        else:
-            self.contents = contents
+
+class DefineShape(Tag):
+    def __init__(self, shape_id, **kwargs):
+        Tag.__init__(self, **kwargs)
+        self.update_contents({'shape_id': shape_id})
+    def execute(self):
+        shape_id = self.contents['shape_id']
+        print "Adding shape with id %d" %shape_id
+        self.program().addShape(Shape(shape_id))
 
 class DoActionTag(ActionTag):
     pass
@@ -62,59 +89,15 @@ class VideoStreamTag(Tag):
 
 
 
-class Type:
-    def __init__(self, value):
-        self.value = value
-    def __str__(self):
-        return "%s(%s)" %(self.__class__.__name__, str(self.value))
-    def __repr__(self):
-        return self.__str__()
-    
-class String(Type):
-    def __init__(self, value):
-        assert isinstance(value, str)
-        Type.__init__(self, value)
-    
-class Float(Type):
-    pass
-
-class Integer(Type):
-    pass
-
-class Boolean(Type):
-    pass
-
-class Double(Type):
-    pass
-
-class RegisterNumber(Type):
-    pass
-
-class Constant8(Type):
-    pass
-
-class Constant16(Type):
-    pass
-
-class Null(Type):
-    def __init__(self):
-        Type.__init__(self, None)
-
-class Undefined(Type):
-    def __init__(self):
-        Type.__init__(self, None)
-
-
-
 unhandled_codes = {}
 class SWF:
     tag_type_to_string = {
         0 : "End",
-        1 : "Show Frame",
+        1 : "ShowFrame",
         2 : "DefineShape",
         4 : "PlaceObject",
-        5 : "Remove Object",
-        9 : "Set Background Color",
+        5 : "RemoveObject",
+        9 : "SetBackgroundColor",
         12 : "DoAction",
         20 : "DefineBitsLossless",
         22 : "DefineShape2",
@@ -130,6 +113,37 @@ class SWF:
         70 : "PlaceObject3",
         88 : "DefineFontName"
     }
+    
+    tag_type_to_is_executable = {
+        0 : True,
+        # 1 : "ShowFrame",
+        # 2 : "DefineShape",
+        # 4 : "PlaceObject",
+        # 5 : "RemoveObject",
+        9 : False,
+        # 12 : "DoAction",
+        # 20 : "DefineBitsLossless",
+        # 22 : "DefineShape2",
+        24 : False,
+        # 32 : "DefineShape3",
+        # 36 : "DefineBitsLossless2",
+        # 37 : "DefineEditText",
+        # 39 : "DefineSprite",
+        # 48 : "DefineFont",
+        # 56 : "ExportAssets",
+        # 59 : "DoInitAction",
+        # 60 : "DefineVideoStream",
+        # 70 : "PlaceObject3",
+        # 88 : "DefineFontName"
+        -1 : True
+    }
+    
+    # tag_name_to_class = {}
+    # for tag_name in tag_type_to_string.values():
+    #     tag_class_name = tag_name+"Tag"
+    #     if tag_class_name in globals():
+    #         continue
+    #     
     
     action_code_to_name = {
         0 : 'action_null?',
@@ -383,16 +397,27 @@ class SWF:
             sprite_id = self.read_ui(2)
             print "DoInitAction for Sprite ID %d" %sprite_id
             self.program.addChild( DoInitActionTag.fromDoActionTag( sprite_id, self.read_actions() ) )
+        elif tag_type in (2, 22, 32):
+            self.program.addChild( self.read_define_shape(tag_length) )
         else:
             if tag_type in self.tag_type_to_string:
                 tag_name = self.tag_type_to_string[tag_type]
-                print tag_name
-                self.program.addChild(Tag(name=tag_name))
+                if tag_type in self.tag_type_to_is_executable and not self.tag_type_to_is_executable[tag_type]:
+                    self.program.addChild(NonExecutingTag(name=tag_name))
+                else:
+                    self.program.addChild(Tag(name=tag_name))
             else:
                 assert False, "Unhandled tag code: %d" % tag_type
             self.step_bytes(tag_length)
         bytesRead = self.byte_pos - startPos 
         assert tag_length == bytesRead, "Tag length mismatch: expected %d bytes, read %d" %(tag_length, bytesRead)
+        
+    def read_define_shape(self, tag_length):
+        before_pos = self.byte_pos
+        shape_id = self.read_ui(2)
+        shape_bounds = self.read_rect()
+        self.step_bytes( tag_length + before_pos - self.byte_pos )
+        return DefineShape(shape_id)
         
     def read_video_stream_tag_body(self):
         character_id = self.read_ui(2)
@@ -542,5 +567,7 @@ unhandled_codes = unhandled_codes.keys()
 unhandled_codes.sort()
 for code in unhandled_codes:
     print "%d: %s" %(code, hex(code))
+
+swf.program.execute()
 
 print "done"
