@@ -42,6 +42,18 @@ class Undefined(Type):
 
 
 
-class Shape:
-    def __init__(self, shape_id):
-        self.shape_id = shape_id
+class Character:
+    def __init__(self, character_id):
+        self.character_id = character_id
+    def __getattr__(self, attr_name):
+        if attr_name == self.id_field():
+            return self.character_id
+        raise AttributeError("'%s' object has no attribute '%s'" %(self.__class__.__name__, attr_name))
+    def id_field(self):
+        return "%s_id" %self.__class__.__name__.lower()
+
+class Shape(Character):
+    pass
+        
+class Sprite(Character):
+    pass

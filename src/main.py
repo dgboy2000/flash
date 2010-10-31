@@ -44,10 +44,10 @@ class NonExecutingTag(Tag):
     
 class Program(Tag):
     def __init__(self, *args, **kwargs):
-        self.shapes = {}
+        self.characters = {}
         Tag.__init__(self, *args, **kwargs)
-    def addShape(self, shape):
-        self.shapes[shape.shape_id] = shape
+    def addCharacter(self, character):
+        self.characters[character.character_id] = character
     def execute(self):
         for child_tag in self.children:
             child_tag.execute()
@@ -62,14 +62,22 @@ class ActionTag(Tag):
             kwargs['contents'] = {}
         Tag.__init__(self, **kwargs)
 
-class DefineShape(Tag):
-    def __init__(self, shape_id, **kwargs):
+class DefineCharacter(Tag):
+    def __init__(self, character_id, **kwargs):
         Tag.__init__(self, **kwargs)
-        self.update_contents({'shape_id': shape_id})
+        self.update_contents({'character_id': character_id})
+    def _build_character(self, character_id):
+        return globals()[self.character_type](character_id)
     def execute(self):
-        shape_id = self.contents['shape_id']
-        print "Adding shape with id %d" %shape_id
-        self.program().addShape(Shape(shape_id))
+        character_id = self.contents['character_id']
+        print "Adding %s with id %d" %(self.character_type, character_id)
+        self.program().addCharacter(self._build_character(character_id))
+
+class DefineShape(DefineCharacter):
+    character_type = "Shape"
+
+class DefineSprite(DefineCharacter):
+    character_type = "Sprite"
 
 class DoActionTag(ActionTag):
     pass
@@ -399,6 +407,8 @@ class SWF:
             self.program.addChild( DoInitActionTag.fromDoActionTag( sprite_id, self.read_actions() ) )
         elif tag_type in (2, 22, 32):
             self.program.addChild( self.read_define_shape(tag_length) )
+        elif tag_type == 39:
+            self.program.addChild( self.read_define_sprite(tag_length) )
         else:
             if tag_type in self.tag_type_to_string:
                 tag_name = self.tag_type_to_string[tag_type]
@@ -412,13 +422,22 @@ class SWF:
         bytesRead = self.byte_pos - startPos 
         assert tag_length == bytesRead, "Tag length mismatch: expected %d bytes, read %d" %(tag_length, bytesRead)
         
+        
+        
     def read_define_shape(self, tag_length):
         before_pos = self.byte_pos
         shape_id = self.read_ui(2)
         shape_bounds = self.read_rect()
         self.step_bytes( tag_length + before_pos - self.byte_pos )
-        return DefineShape(shape_id)
-        
+        return DefineShape(shape_id, contents={'shape_bounds': shape_bounds})
+       
+    def read_define_sprite(self, tag_length):
+        before_pos = self.byte_pos
+        sprite_id = self.read_ui(2)
+        frame_count = self.read_ui(2)
+        self.step_bytes( tag_length + before_pos - self.byte_pos )
+        return DefineSprite(sprite_id, contents={'frame_count': frame_count})
+      
     def read_video_stream_tag_body(self):
         character_id = self.read_ui(2)
         num_frames = self.read_ui(2)
@@ -442,6 +461,7 @@ class SWF:
         }
         return VideoStreamTag(contents = contents)
 
+        
         
     def read_rect(self):
         Nbits = self.read_ub(5)
@@ -571,3 +591,5 @@ for code in unhandled_codes:
 swf.program.execute()
 
 print "done"
+print "TODO:"
+print "DefineSprite: sub tags"
