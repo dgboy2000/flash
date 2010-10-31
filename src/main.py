@@ -300,7 +300,7 @@ class SWF:
         print "Storing '%s' in register index '%d'" %(str(stackElt), registerIndex)
         self.action_registers[registerIndex] = stackElt
 
-    def read_tag(self):
+    def read_tag(self, debug=False):
         tag = None
         
         short_header = self.read_ui(2)
@@ -308,6 +308,9 @@ class SWF:
         tag_length = short_header % 2**6
         if tag_length == 63:
             tag_length = self.read_si(4)
+            
+        if debug:
+            print "Tag type %d, length %d" %(tag_type, tag_length)
             
         startPos = self.byte_pos
         if tag_type in (60,):
@@ -345,23 +348,26 @@ class SWF:
     def read_control_tags_for_character(self, character_tag, tags_length):
         end_pos = swf.byte_pos + tags_length
         while self.byte_pos < end_pos:
-            character_tag.addChild(self.read_tag())
+            print "Reading control tag"
+            character_tag.addChild(self.read_tag(debug=True))
                     
     def read_define_shape(self, tag_length):
         before_pos = self.byte_pos
         shape_id = self.read_ui(2)
         shape_bounds = self.read_rect()
         self.step_bytes( tag_length + before_pos - self.byte_pos )
-        shape = DefineShape(shape_id, contents={'shape_bounds': shape_bounds})
-        # self.read_control_tags_for_character(shape, tag_length + before_pos - self.byte_pos)
-        return shape
+        return DefineShape(shape_id, contents={'shape_bounds': shape_bounds})
        
     def read_define_sprite(self, tag_length):
         before_pos = self.byte_pos
         sprite_id = self.read_ui(2)
         frame_count = self.read_ui(2)
-        self.step_bytes( tag_length + before_pos - self.byte_pos )
-        return DefineSprite(sprite_id, contents={'frame_count': frame_count})
+        # self.step_bytes( tag_length + before_pos - self.byte_pos )
+        sprite = DefineSprite(sprite_id, contents={'frame_count': frame_count})
+        self.read_control_tags_for_character(sprite, tag_length + before_pos - self.byte_pos)
+        print "Final position %d, should be %d" %(self.byte_pos, before_pos+tag_length)
+        
+        return sprite
       
     def read_show_frame(self, tag_length):
         self.step_bytes( tag_length )
@@ -508,8 +514,8 @@ print "Read %d bytes" %len(swf.file_contents)
 print "Byte pos is %d" %swf.byte_pos
 #import pdb; pdb.set_trace()
 
-print "Program has %d child tags" %len(swf.program.children)
-print str(swf.program)
+# print "Program has %d child tags" %len(swf.program.children)
+# print str(swf.program)
 
 unhandled_codes = unhandled_codes.keys()
 unhandled_codes.sort()
