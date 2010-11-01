@@ -62,6 +62,10 @@ class ActionTag(Tag):
         if 'contents' not in kwargs:
             kwargs['contents'] = {}
         Tag.__init__(self, **kwargs)
+    def __getattr__(self, attr):
+        if attr in self.contents:
+            return self.contents[attr]
+        raise AttributeError("'%s' object has no attribute '%s'" %(self.__class__.__name__, attr))
     def action_code(self):
         return self.contents['action_code']
     def runAction(self):
@@ -146,9 +150,20 @@ class DoInitActionTag(DoActionTag):
         return do_init_action_tag
     def execute(self):
         print "Attaching DoInit to sprite %d" %self.sprite_id()
-        self.program().getCharacter(self.sprite_id()).setAction(self)
+        # self.program().getCharacter(self.sprite_id()).setAction(self)
+        self.program().display_list.addInitActions(self.children)
+        # TODO: associate actions with their sprite?
+        # TODO: check to make sure these actions should run in the current frame?
     def sprite_id(self):
         return self.contents['sprite_id']
+
+# class FrameLabel(Tag):
+#     """
+#     The FrameLabel tag gives the specified Name to the current frame. ActionGoToLabel uses
+#     this name to identify the frame.
+#     """
+#     def execute(self):
+#         print ""
 
 class PlaceObject(DepthTag):
     """
@@ -189,7 +204,7 @@ class ShowFrame(Tag):
     The minimum file format version is SWF 1.
     """
     def execute(self):
-        print "ShowFrame with %d characters and %d actions" %(len(self.program().display_list), len(self.program().display_list.pending_actions))
+        print "ShowFrame with %d characters and %d actions" %(len(self.program().display_list), self.program().display_list.numPendingActions())
         for character in sorted(self.program().display_list):
             print "\tRendering character %s" %str(character)
             character.display()

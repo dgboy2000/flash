@@ -61,6 +61,7 @@ class SWF:
         36 : False,
         37 : False,
         # 39 : "DefineSprite",
+        43 : False,
         48 : False,
         56 : False,
         # 59 : "DoInitAction",
@@ -300,12 +301,8 @@ class SWF:
         assert bytesRead == length, "Error in action push: expected %d bytes, read %d" %(length, bytesRead)
         return {'values' : values}
 
-        
     def read_action_store_register(self, length):
-        registerIndex = self.read_ui(1) - 1
-        stackElt = self.action_stack[-1]
-        print "Storing '%s' in register index '%d'" %(str(stackElt), registerIndex)
-        self.action_registers[registerIndex] = stackElt
+        return {'register_number': self.read_ui(1)}
 
     def read_tag(self, debug=False):
         tag = None
