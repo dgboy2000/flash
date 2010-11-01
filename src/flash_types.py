@@ -59,6 +59,15 @@ class Character:
     def set_action(self, action):
         self.action = action
 
+class EditText(Character):
+    pass
+
+class Font(Character):
+    pass
+    
+class FontName(Character):
+    pass
+
 class Shape(Character):
     pass
         

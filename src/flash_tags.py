@@ -1,6 +1,7 @@
 import copy
 import heapq
 
+from flash_actions import *
 from flash_types import *
 
 class Tag:
@@ -56,12 +57,15 @@ class Program(Tag):
 
 
 class ActionTag(Tag):
+    action_doer = ActionDoer()
     def __init__(self, **kwargs):
         if 'contents' not in kwargs:
             kwargs['contents'] = {}
         Tag.__init__(self, **kwargs)
+    def action_code(self):
+        return self.contents['action_code']
     def runAction(self):
-        raise NotImplementedError("runAction not defined for action tag: %s" %self.__str__())
+        self.action_doer.do(self)
 
 class DefineCharacter(Tag):
     def __init__(self, character_id, **kwargs):
@@ -75,6 +79,15 @@ class DefineCharacter(Tag):
         self.program().addCharacter(self._build_character(character_id))
         for child in self.children:
             child.execute()
+
+class DefineEditText(DefineCharacter):
+    character_type = "EditText"
+
+class DefineFont(DefineCharacter):
+    character_type = "Font"
+    
+class DefineFontName(DefineCharacter):
+    character_type = "FontName"
 
 class DefineShape(DefineCharacter):
     character_type = "Shape"

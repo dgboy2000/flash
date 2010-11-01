@@ -39,6 +39,12 @@ class SWF:
         88 : "DefineFontName"
     }
     
+    simple_define_character_tags = {
+        37 : "DefineEditText",
+        48 : "DefineFont",
+        88 : "DefineFontName"
+    }
+    
     tag_type_to_is_executable = {
         0 : False,
         # 1 : "ShowFrame",
@@ -171,6 +177,7 @@ class SWF:
         else:
             if action_code not in self.action_code_to_name:
                 unhandled_codes[action_code] = True        
+        action_tag.update_contents({'action_code': action_code})
         
         bytesRead = self.byte_pos - startPos
         assert bytesRead == expected_length, "Wrong number of action bytes: expected %d, read %d" %(expected_length, bytesRead)
@@ -333,6 +340,8 @@ class SWF:
             tag = self.read_place_object2(tag_length)
         elif tag_type == 28:
             tag = self.read_remove_object2(tag_length)
+        elif tag_type in self.simple_define_character_tags:
+            tag = self.read_simple_define_character_tag(tag_length, tag_type)
         else:
             if tag_type in self.tag_type_to_string:
                 tag_name = self.tag_type_to_string[tag_type]
@@ -352,8 +361,7 @@ class SWF:
     def read_control_tags_for_character(self, character_tag, tags_length):
         end_pos = swf.byte_pos + tags_length
         while self.byte_pos < end_pos:
-            print "Reading control tag"
-            character_tag.addChild(self.read_tag(debug=True))
+            character_tag.addChild(self.read_tag())
                     
     def read_define_shape(self, tag_length):
         before_pos = self.byte_pos
@@ -369,7 +377,7 @@ class SWF:
         # self.step_bytes( tag_length + before_pos - self.byte_pos )
         sprite = DefineSprite(sprite_id, contents={'frame_count': frame_count})
         self.read_control_tags_for_character(sprite, tag_length + before_pos - self.byte_pos)
-        print "Final position %d, should be %d" %(self.byte_pos, before_pos+tag_length)
+        assert self.byte_pos == before_pos+tag_length, "Final position %d, should be %d" %(self.byte_pos, before_pos+tag_length)
         return sprite
         
     def read_place_object2(self, tag_length):
@@ -390,6 +398,12 @@ class SWF:
     def read_remove_object2(self, tag_length):
         depth = self.read_ui(2)
         return RemoveObject2(depth)
+      
+    def read_simple_define_character_tag(self, tag_length, tag_type):
+        before_pos = self.byte_pos
+        character_id = self.read_ui(2)
+        self.step_bytes( tag_length + before_pos - self.byte_pos )
+        return globals()[self.simple_define_character_tags[tag_type]](character_id)
       
     def read_show_frame(self, tag_length):
         self.step_bytes( tag_length )
