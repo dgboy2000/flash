@@ -18,15 +18,19 @@ class SWF:
         2 : "DefineShape",
         4 : "PlaceObject",
         5 : "RemoveObject",
+        7 : "DefineButton",
         9 : "SetBackgroundColor",
         12 : "DoAction",
         20 : "DefineBitsLossless",
         22 : "DefineShape2",
         24 : "Protect",
+        26 : "PlaceObject2",
+        28 : "RemoveObject2",
         32 : "DefineShape3",
         36 : "DefineBitsLossless2",
         37 : "DefineEditText",
         39 : "DefineSprite",
+        43 : "FrameLabel",
         48 : "DefineFont",
         56 : "ExportAssets",
         59 : "DoInitAction",
@@ -36,7 +40,7 @@ class SWF:
     }
     
     tag_type_to_is_executable = {
-        0 : True,
+        0 : False,
         # 1 : "ShowFrame",
         # 2 : "DefineShape",
         # 4 : "PlaceObject",
@@ -46,6 +50,7 @@ class SWF:
         # 20 : "DefineBitsLossless",
         # 22 : "DefineShape2",
         24 : False,
+        # 26 : "PlaceObject2",
         # 32 : "DefineShape3",
         36 : False,
         37 : False,
@@ -68,6 +73,7 @@ class SWF:
     
     action_code_to_name = {
         0 : 'action_null?',
+        7 : 'action_stop',
         11 : 'action_subtract',
         12 : 'action_multiply',
         13 : 'action_divide',
@@ -158,19 +164,13 @@ class SWF:
 
         expected_length = 1        
         if action_length > 0:
-            # print "Action %d: %s" %(action_code, action_name)
-            # if action code not in code to name:
-            #     assert False, "Unhandled action code: %d" %action_code
-            #     action = self.read_ui(action_length)
             tag_contents = getattr(self, "read_%s" %action_name).__call__(action_length)
             action_tag.update_contents(tag_contents)
 
             expected_length = action_length + 3
         else:
             if action_code not in self.action_code_to_name:
-                unhandled_codes[action_code] = True
-            # print "Action code %d of length 0" %action_code
-        
+                unhandled_codes[action_code] = True        
         
         bytesRead = self.byte_pos - startPos
         assert bytesRead == expected_length, "Wrong number of action bytes: expected %d, read %d" %(expected_length, bytesRead)
@@ -329,6 +329,10 @@ class SWF:
             tag = self.read_define_sprite(tag_length)
         elif tag_type == 1:
             tag = self.read_show_frame(tag_length)
+        elif tag_type == 26:
+            tag = self.read_place_object2(tag_length)
+        elif tag_type == 28:
+            tag = self.read_remove_object2(tag_length)
         else:
             if tag_type in self.tag_type_to_string:
                 tag_name = self.tag_type_to_string[tag_type]
@@ -366,8 +370,26 @@ class SWF:
         sprite = DefineSprite(sprite_id, contents={'frame_count': frame_count})
         self.read_control_tags_for_character(sprite, tag_length + before_pos - self.byte_pos)
         print "Final position %d, should be %d" %(self.byte_pos, before_pos+tag_length)
-        
         return sprite
+        
+    def read_place_object2(self, tag_length):
+        before_pos = self.byte_pos
+        
+        self.read_ub(6)
+        has_character = self.read_ub(1)
+        self.seek_byte_start()
+        
+        depth = self.read_ui(2)
+        character_id = None
+        if has_character:
+            character_id = self.read_ui(2)
+            
+        self.step_bytes( tag_length + before_pos - self.byte_pos )
+        return PlaceObject2(depth, contents={'character_id': character_id})
+        
+    def read_remove_object2(self, tag_length):
+        depth = self.read_ui(2)
+        return RemoveObject2(depth)
       
     def read_show_frame(self, tag_length):
         self.step_bytes( tag_length )
